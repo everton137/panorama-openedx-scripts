@@ -1,0 +1,204 @@
+#!/bin/bash
+
+# panorama_upload_data
+#
+# This script works in an Open edX instance.
+# It must be run by the edxapp user (sudo -u edxapp panorama_upload_data)
+# It will run a mysql SELECT * query from all the tables specified and store the results in REPORTDIR
+# The MySQL user and password will be extracted from lms configuration files, or can be overriden by the -u and -p options
+# The tab2csv.py script helps converting the MySQL output to csv.
+# Then it will call the dump_structure.py Django manage script that will extract the courses structures as CSV
+# All these files will be uploaded to S3. The bucket can be specified with the -b option, or will be inferred from the
+# list of buckets by matching the pattern /panoramabuckets........-raw........-............$/
+# In order to support multiple Open edX instances, the data is partitioned with the url of the instance. This will be
+# taken from the lms configuration LMS_BASE, or can be overriden by the -l option. It must be in the form
+# "lms.example.com", without http[s]://, subdomains or any slash.
+# AWS authentication is done by the role attached to the instance or the credentials configured
+# Tracking logs will be uploaded (except with -x option) to the bucket specified with the -t option, or will be inferred from the
+# list of buckets by matching the pattern /panoramabuckets........-rawlogs........-............$/
+#
+# Requires:
+# -aws cli
+# -awk
+#
+# Add to the crontab 0 * * * * sudo -u edxapp /path/to/panorama_upload_data.sh
+
+
+# Global configurable variables variables
+LMSAUTHJSON=/edx/app/edxapp/lms.auth.json   # Location of the LMS authorization file
+LMSENVJSON=/edx/app/edxapp/lms.env.json     # Location of the LMS config file
+REPORTDIR=/edx/var/edxapp/panorama          # Temporary directory
+MYSQL_USER=edxapp001                        # User for MySQL queries
+LOGS_DIRECTORY=/edx/var/log/tracking/       # Location of the tracking logs
+
+TABLES="auth_user\
+ student_courseenrollment\
+ auth_userprofile\
+ student_courseaccessrole\
+ course_overviews_courseoverview\
+ courseware_studentmodule\
+ grades_persistentcoursegrade\
+ student_manualenrollmentaudit\
+ student_courseenrollmentallowed\
+ certificates_generatedcertificate"
+
+# Private variables
+DRYMODE=0
+VERBOSE=0
+EXCLUDE_LOGS=0
+
+# Read input parameters
+
+# A POSIX variable
+OPTIND=1         # Reset in case getopts has been used previously in the shell.
+
+function log() {
+    if [[ ${DRYMODE} -eq 1 || ${VERBOSE} -eq 1 ]]; then
+      echo "$1"
+    fi
+}
+while getopts "h?l:b:u:p:t:dvx" opt; do
+    case "$opt" in
+    h|\?)
+        echo "Usage: panorama_upload_data [-l <lms url>]"
+        echo "                            [-b <s3 bucket>]"
+        echo "                            [-u MySQL user] [-p MySQL password]"
+        echo "                            [-t <s3 bucket for tracking_logs>]"
+        echo "                            [-d] [-v] [-x]"
+        echo "-l <lms url>: must not contain http[s] or slashes. It must be in the form 'campus.example.com'"
+        echo "           will default to the the value of LMS_BASE found in ${LMSENVJSON}"
+        echo "-b <bucket>: name of the bucket to upload the data."
+        echo "           will default to a bucket found matching the pattern /panoramabuckets........-raw........-............$/"
+        echo "-u <MySQL user>: will default to 'edxapp001'"
+        echo "-p <MySQL password>: will default to the password configured in ${LMSAUTHJSON}"
+        echo "-v: verbose mode"
+        echo "-d: dry verbose mode. Will not query the database or upload results. Implies verbose mode"
+        echo "-x: Exclude tracking logs upload"
+        exit 0
+        ;;
+    l)  LMS=$OPTARG
+        ;;
+    b)  REPORTBUCKET=$OPTARG
+        ;;
+    u)  MYSQL_USER=$OPTARG
+        ;;
+    p)  export MYSQL_PWD=$OPTARG
+        ;;
+    d)  DRYMODE=1
+        ;;
+    v)  VERBOSE=1
+        ;;
+    t)  TRACKING_LOGS_BUCKET=$OPTARG
+        ;;
+    x)  EXCLUDE_LOGS=1
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ "${1:-}" = "--" ] && shift
+
+
+# Get the dir of the script, wherever it is called from
+SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+# Set the S3 bucket name for mysql tables
+if [[ -z "$REPORTBUCKET" ]]; then
+  log "REPORTBUCKET not specified"
+
+  if ! REPORTBUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-raw........-............$/{print $3}'); then
+    >&2 echo "Error retrieving buckets from aws"
+    exit 1
+  fi
+  log "Using bucket ${REPORTBUCKET}"
+fi
+
+# Set the S3 bucket name for tracking logs
+if [[ -z "$TRACKING_LOGS_BUCKET" ]]; then
+  log "Tracking logs bucket not specified"
+
+  if ! TRACKING_LOGS_BUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-rawlogs........-............$/{print $3}'); then
+    >&2 echo "Error retrieving buckets from aws"
+    exit 1
+  fi
+  log "Using bucket ${TRACKING_LOGS_BUCKET} for tracking logs"
+fi
+
+# Set the MySQL password
+if [[ -z "$MYSQL_PWD" ]]; then
+  log  "MySQL password not specified"
+
+  MYSQL_PWD=$(awk '/DATABASES/{next}/default/{next}/PASSWORD/{ p=$2 ; next }/edxapp001/{print p; exit}' "${LMSAUTHJSON}")
+  if [[ $? -ne 0 ]]; then
+    log  "Could not find MySQL password from ${LMSAUTHJSON}"
+    exit 1
+  else
+    log  "MySQL password found in ${LMSAUTHJSON}"
+    MYSQL_PWD=$(echo "$MYSQL_PWD" | tr -d '",')
+    export MYSQL_PWD
+  fi
+fi
+
+# If LMS was not set as argument, extracts the lms domain name from lms.env.json.
+# It should not have http[s] prefix or slashes.
+if [[ -z "$LMS" ]]; then
+  log "LMS not specified"
+  if [[ -f "${LMSENVJSON}" ]]; then
+    LMS=$(awk '/"LMS_BASE":/{print $2}' "${LMSENVJSON}" | tr -d '",')
+    if [[ -z "$LMS" ]]; then
+      log  "LMS_BASE not found in ${LMSENVJSON}"
+      exit 1
+    else
+      log  "Using LMS=${LMS} from ${LMSENVJSON}"
+    fi
+  else
+    log  "${LMSENVJSON} not found"
+    exit 1
+  fi
+fi
+
+# Dump all tables
+for TABLE in ${TABLES}
+do
+    LMSDIR="${REPORTDIR}/${TABLE}/lms=${LMS}"
+
+    mkdir -p "${LMSDIR}"
+
+    REPORTFILE=${TABLE}.csv
+    log "Dumping ${TABLE} to ${LMSDIR}/${REPORTFILE}"
+    if [[ ${DRYMODE} -eq 0 ]]; then
+      mysql -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | "${SCRIPTDIR}"/tab2csv.py > "${LMSDIR}/${REPORTFILE}"
+    fi
+
+done
+
+# Dump the courses structures
+
+# if the management command does not exist, create the symlink
+if [[ ! -e "/edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_structure.py" ]]; then
+  log "Creating symlink for dump_structure"
+  ln -s "${SCRIPTDIR}"/dump_structure.py /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_structure.py
+fi
+
+log "Dumping course structures to ${LMSDIR}/course_structures.csv"
+# shellcheck disable=SC2024
+if [[ ${DRYMODE} -eq 0 ]]; then
+  /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_structure > "${REPORTDIR}/course_structures/lms=${LMS}"/course_structures.csv
+fi
+
+# Upload all to S3
+log "Syncing ${REPORTDIR} to S3 bucket ${REPORTBUCKET}"
+if [[ ${DRYMODE} -eq 0 ]]; then
+  /usr/local/bin/aws s3 sync "${REPORTDIR}" "${REPORTBUCKET}"
+fi
+
+# Upload tracking logs to s3
+if [[ ${EXCLUDE_LOGS} -eq 0 ]]; then
+  log "Syncing ${LOGS_DIRECTORY} to S3 bucket ${TRACKING_LOGS_BUCKET}"
+  if [[ ${DRYMODE} -eq 0 ]]; then
+    /usr/local/bin/aws s3 sync "${LOGS_DIRECTORY}" "${TRACKING_LOGS_BUCKET}/tracking_logs/${LMS}"
+  fi
+else
+  log "Skipping tracking logs upload"
+fi
