@@ -1,9 +1,9 @@
 """
-Dump the list of video xblocks and its description
+Dump the list of courses and its structure
 
-Location: /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_xblocks.py
+Location: /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_structures.py
 Run with
-sudo -u edxapp /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_xblocks [--category=<category>]
+sudo -u edxapp /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_structure [--category=<category>]
 
 """
 import json

@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# (c) 2021 Aulasneo.com. All rights reserved.
+#
+# Licensed under the GNU GPL, Version 3.0 license (the "License"). You may not use this file except
+# in compliance with the License. A copy of the License is located at
+#
+# https://www.gnu.org/licenses/gpl-3.0.html
+#
+# or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
+#
+
 # panorama_upload_data
 #
 # This script works in an Open edX instance.
@@ -21,7 +33,7 @@
 # -aws cli
 # -awk
 #
-# Add to the crontab 0 * * * * sudo -u edxapp /path/to/panorama_upload_data.sh
+# Add to the crontab 0 * * * * sudo -u edxapp /path/to/panorama_upload_data
 
 
 # Global configurable variables variables
@@ -46,6 +58,7 @@ TABLES="auth_user\
 DRYMODE=0
 VERBOSE=0
 EXCLUDE_LOGS=0
+MYSQL_HOST=localhost
 
 # Read input parameters
 
@@ -57,7 +70,7 @@ function log() {
       echo "$1"
     fi
 }
-while getopts "h?l:b:u:p:t:dvx" opt; do
+while getopts "h?l:b:u:p:t:H:dvx" opt; do
     case "$opt" in
     h|\?)
         echo "Usage: panorama_upload_data [-l <lms url>]"
@@ -92,6 +105,8 @@ while getopts "h?l:b:u:p:t:dvx" opt; do
         ;;
     x)  EXCLUDE_LOGS=1
         ;;
+    H)  MYSQL_HOST=$OPTARG
+        ;;
     esac
 done
 
@@ -100,16 +115,18 @@ shift $((OPTIND-1))
 [ "${1:-}" = "--" ] && shift
 
 
-# Get the dir of the script, wherever it is called from
+# Get the directory of this script, wherever it is called from
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 # Set the S3 bucket name for mysql tables
 if [[ -z "$REPORTBUCKET" ]]; then
-  log "REPORTBUCKET not specified"
+  log "-b REPORTBUCKET not specified"
 
   if ! REPORTBUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-raw........-............$/{print $3}'); then
-    >&2 echo "Error retrieving buckets from aws"
-    exit 1
+    >&2 echo "Could not find S3 bucket for Panorama raw data"
+    if [[ ${DRYMODE} -ne 0 ]]; then
+      exit 1
+    fi
   fi
   log "Using bucket ${REPORTBUCKET}"
 fi
@@ -119,20 +136,24 @@ if [[ -z "$TRACKING_LOGS_BUCKET" ]]; then
   log "Tracking logs bucket not specified"
 
   if ! TRACKING_LOGS_BUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-rawlogs........-............$/{print $3}'); then
-    >&2 echo "Error retrieving buckets from aws"
-    exit 1
+    >&2 echo "Could not find S3 bucket for Panorama raw logs"
+    if [[ ${DRYMODE} -ne 0 ]]; then
+      exit 1
+    fi
   fi
   log "Using bucket ${TRACKING_LOGS_BUCKET} for tracking logs"
 fi
 
 # Set the MySQL password
 if [[ -z "$MYSQL_PWD" ]]; then
-  log  "MySQL password not specified"
+  log  "-p MySQL password not specified"
 
   MYSQL_PWD=$(awk '/DATABASES/{next}/default/{next}/PASSWORD/{ p=$2 ; next }/edxapp001/{print p; exit}' "${LMSAUTHJSON}")
   if [[ $? -ne 0 ]]; then
     log  "Could not find MySQL password from ${LMSAUTHJSON}"
-    exit 1
+    if [[ ${DRYMODE} -ne 0 ]]; then
+      exit 1
+    fi
   else
     log  "MySQL password found in ${LMSAUTHJSON}"
     MYSQL_PWD=$(echo "$MYSQL_PWD" | tr -d '",')
@@ -143,18 +164,22 @@ fi
 # If LMS was not set as argument, extracts the lms domain name from lms.env.json.
 # It should not have http[s] prefix or slashes.
 if [[ -z "$LMS" ]]; then
-  log "LMS not specified"
+  log "-l LMS not specified"
   if [[ -f "${LMSENVJSON}" ]]; then
     LMS=$(awk '/"LMS_BASE":/{print $2}' "${LMSENVJSON}" | tr -d '",')
     if [[ -z "$LMS" ]]; then
       log  "LMS_BASE not found in ${LMSENVJSON}"
-      exit 1
+      if [[ ${DRYMODE} -ne 0 ]]; then
+        exit 1
+      fi
     else
       log  "Using LMS=${LMS} from ${LMSENVJSON}"
     fi
   else
     log  "${LMSENVJSON} not found"
-    exit 1
+      if [[ ${DRYMODE} -ne 0 ]]; then
+        exit 1
+      fi
   fi
 fi
 
@@ -168,7 +193,10 @@ do
     REPORTFILE=${TABLE}.csv
     log "Dumping ${TABLE} to ${LMSDIR}/${REPORTFILE}"
     if [[ ${DRYMODE} -eq 0 ]]; then
-      mysql -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | "${SCRIPTDIR}"/tab2csv.py > "${LMSDIR}/${REPORTFILE}"
+      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | "${SCRIPTDIR}"/tab2csv.py > "${LMSDIR}/${REPORTFILE}"
+    else
+      log "Table ${TABLE}:"
+      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT count(*) FROM ${TABLE};"
     fi
 
 done
