@@ -209,6 +209,8 @@ if [[ ! -e "/edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/co
   ln -s "${SCRIPTDIR}"/dump_structure.py /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_structure.py
 fi
 
+LMSDIR="${REPORTDIR}/course_structures/lms=${LMS}"
+
 log "Dumping course structures to ${LMSDIR}/course_structures.csv"
 # shellcheck disable=SC2024
 if [[ ${DRYMODE} -eq 0 ]]; then
