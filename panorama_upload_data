@@ -122,7 +122,7 @@ SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 if [[ -z "$REPORTBUCKET" ]]; then
   log "-b REPORTBUCKET not specified"
 
-  if ! REPORTBUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-rawdata........-............$/{print $3}'); then
+  if ! REPORTBUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-rawdata........-/{print $3}'); then
     >&2 echo "Could not find S3 bucket for Panorama raw data"
     if [[ ${DRYMODE} -ne 0 ]]; then
       exit 1
@@ -135,7 +135,7 @@ fi
 if [[ -z "$TRACKING_LOGS_BUCKET" ]]; then
   log "Tracking logs bucket not specified"
 
-  if ! TRACKING_LOGS_BUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-rawlogs........-............$/{print $3}'); then
+  if ! TRACKING_LOGS_BUCKET=$(aws s3 ls --output text | awk '/panoramabuckets........-rawlogs........-/{print $3}'); then
     >&2 echo "Could not find S3 bucket for Panorama raw logs"
     if [[ ${DRYMODE} -ne 0 ]]; then
       exit 1
@@ -221,14 +221,14 @@ fi
 # Upload all to S3
 log "Syncing ${REPORTDIR} to S3 bucket ${REPORTBUCKET}"
 if [[ ${DRYMODE} -eq 0 ]]; then
-  /usr/local/bin/aws s3 sync "${REPORTDIR}" "${REPORTBUCKET}"
+  /usr/local/bin/aws s3 sync "${REPORTDIR}" "s3://${REPORTBUCKET}"
 fi
 
 # Upload tracking logs to s3
 if [[ ${EXCLUDE_LOGS} -eq 0 ]]; then
   log "Syncing ${LOGS_DIRECTORY} to S3 bucket ${TRACKING_LOGS_BUCKET}"
   if [[ ${DRYMODE} -eq 0 ]]; then
-    /usr/local/bin/aws s3 sync "${LOGS_DIRECTORY}" "${TRACKING_LOGS_BUCKET}/tracking_logs/${LMS}"
+    /usr/local/bin/aws s3 sync "${LOGS_DIRECTORY}" "s3://${TRACKING_LOGS_BUCKET}/tracking_logs/${LMS}"
   fi
 else
   log "Skipping tracking logs upload"
