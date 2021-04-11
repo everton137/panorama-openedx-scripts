@@ -210,6 +210,7 @@ if [[ ! -e "/edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/co
 fi
 
 LMSDIR="${REPORTDIR}/course_structures/lms=${LMS}"
+mkdir -p "${LMSDIR}"
 
 log "Dumping course structures to ${LMSDIR}/course_structures.csv"
 # shellcheck disable=SC2024
