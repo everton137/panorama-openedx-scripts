@@ -193,7 +193,7 @@ do
     REPORTFILE=${TABLE}.csv
     log "Dumping ${TABLE} to ${LMSDIR}/${REPORTFILE}"
     if [[ ${DRYMODE} -eq 0 ]]; then
-      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | td -d '\r' | "${SCRIPTDIR}"/tab2csv.py > "${LMSDIR}/${REPORTFILE}"
+      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | tr -d '\r' | "${SCRIPTDIR}"/tab2csv.py > "${LMSDIR}/${REPORTFILE}"
     else
       log "Table ${TABLE}:"
       mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT count(*) FROM ${TABLE};"
