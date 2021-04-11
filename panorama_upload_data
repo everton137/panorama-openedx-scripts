@@ -214,7 +214,7 @@ LMSDIR="${REPORTDIR}/course_structures/lms=${LMS}"
 log "Dumping course structures to ${LMSDIR}/course_structures.csv"
 # shellcheck disable=SC2024
 if [[ ${DRYMODE} -eq 0 ]]; then
-  /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_structure > "${REPORTDIR}/course_structures/lms=${LMS}"/course_structures.csv
+  /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_structure > "${LMSDIR}/course_structures.csv"
 fi
 
 # Upload all to S3
