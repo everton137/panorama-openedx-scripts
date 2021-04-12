@@ -148,7 +148,7 @@ fi
 if [[ -z "$MYSQL_PWD" ]]; then
   log  "-p MySQL password not specified"
 
-  MYSQL_PWD=$(awk '/DATABASES/{next}/default/{next}/PASSWORD/{ p=$2 ; next }/edxapp001/{print p; exit}' "${LMSAUTHJSON}")
+  MYSQL_PWD=$(sudo -u edxapp awk '/DATABASES/{next}/default/{next}/PASSWORD/{ p=$2 ; next }/edxapp001/{print p; exit}' "${LMSAUTHJSON}")
   if [[ $? -ne 0 ]]; then
     log  "Could not find MySQL password from ${LMSAUTHJSON}"
     if [[ ${DRYMODE} -ne 0 ]]; then
@@ -166,7 +166,7 @@ fi
 if [[ -z "$LMS" ]]; then
   log "-l LMS not specified"
   if [[ -f "${LMSENVJSON}" ]]; then
-    LMS=$(awk '/"LMS_BASE":/{print $2}' "${LMSENVJSON}" | tr -d '",')
+    LMS=$(sudo -u edxapp awk '/"LMS_BASE":/{print $2}' "${LMSENVJSON}" | tr -d '",')
     if [[ -z "$LMS" ]]; then
       log  "LMS_BASE not found in ${LMSENVJSON}"
       if [[ ${DRYMODE} -ne 0 ]]; then
@@ -188,12 +188,12 @@ for TABLE in ${TABLES}
 do
     LMSDIR="${REPORTDIR}/${TABLE}/lms=${LMS}"
 
-    mkdir -p "${LMSDIR}"
+    sudo -u edxapp mkdir -p "${LMSDIR}"
 
     REPORTFILE=${TABLE}.csv
     log "Dumping ${TABLE} to ${LMSDIR}/${REPORTFILE}"
     if [[ ${DRYMODE} -eq 0 ]]; then
-      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | tr -d '\r' | "${SCRIPTDIR}"/tab2csv.py > "${LMSDIR}/${REPORTFILE}"
+      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | tr -d '\r' | "${SCRIPTDIR}"/tab2csv.py | sudo tee "${LMSDIR}/${REPORTFILE}" > /dev/null
     else
       log "Table ${TABLE}:"
       mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT count(*) FROM ${TABLE};"
@@ -210,25 +210,29 @@ if [[ ! -e "/edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/co
 fi
 
 LMSDIR="${REPORTDIR}/course_structures/lms=${LMS}"
-mkdir -p "${LMSDIR}"
+sudo -u edxapp mkdir -p "${LMSDIR}"
 
 log "Dumping course structures to ${LMSDIR}/course_structures.csv"
 # shellcheck disable=SC2024
 if [[ ${DRYMODE} -eq 0 ]]; then
-  /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_structure > "${LMSDIR}/course_structures.csv"
+  sudo -u edxapp /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_structure | sudo -u edxapp tee "${LMSDIR}/course_structures.csv" > /dev/null
 fi
 
 # Upload all to S3
 log "Syncing ${REPORTDIR} to S3 bucket ${REPORTBUCKET}"
 if [[ ${DRYMODE} -eq 0 ]]; then
   /usr/local/bin/aws s3 sync "${REPORTDIR}" "s3://${REPORTBUCKET}"
+else
+  /usr/local/bin/aws s3 sync "${REPORTDIR}" "s3://${REPORTBUCKET}" --dryrun
 fi
 
 # Upload tracking logs to s3
 if [[ ${EXCLUDE_LOGS} -eq 0 ]]; then
   log "Syncing ${LOGS_DIRECTORY} to S3 bucket ${TRACKING_LOGS_BUCKET}"
   if [[ ${DRYMODE} -eq 0 ]]; then
-    /usr/local/bin/aws s3 sync "${LOGS_DIRECTORY}" "s3://${TRACKING_LOGS_BUCKET}/tracking_logs/${LMS}"
+    sudo -u syslog /usr/local/bin/aws s3 sync "${LOGS_DIRECTORY}" "s3://${TRACKING_LOGS_BUCKET}/tracking_logs/${LMS}"
+  else
+    sudo -u syslog /usr/local/bin/aws s3 sync "${LOGS_DIRECTORY}" "s3://${TRACKING_LOGS_BUCKET}/tracking_logs/${LMS}" --dryrun
   fi
 else
   log "Skipping tracking logs upload"
