@@ -65,7 +65,7 @@ class Command(BaseCommand):
 
             course = store.get_course(course_key)
             if course is None:
-                raise CommandError("Invalid course_id")
+                raise CommandError("Invalid course_id {}".format(str(course_key)))
 
             # Precompute inherited metadata at the course level, if needed:
 
