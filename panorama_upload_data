@@ -206,7 +206,7 @@ done
 # if the management command does not exist, create the symlink
 if [[ ! -e "/edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_structure.py" ]]; then
   log "Creating symlink for dump_structure"
-  ln -s "${SCRIPTDIR}"/dump_structure.py /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_structure.py
+  sudo -u edxapp ln -s "${SCRIPTDIR}"/dump_structure.py /edx/app/edxapp/edx-platform/lms/djangoapps/courseware/management/commands/dump_structure.py
 fi
 
 LMSDIR="${REPORTDIR}/course_structures/lms=${LMS}"

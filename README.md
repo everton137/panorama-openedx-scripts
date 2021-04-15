@@ -20,7 +20,7 @@ git clone https://github.com/aulasneo/panorama-openedx-scripts.git
 ```
 Add a line like this to the crontab in order to run the script once an hour:
 ```
-0 * * * * sudo -u edxapp /path/to/panorama_upload_data
+0 * * * * /path/to/panorama_upload_data
 ```
 
 **NOTE**
