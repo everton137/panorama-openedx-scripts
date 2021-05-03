@@ -232,7 +232,7 @@ sudo -u edxapp mkdir -p "${LMSDIR}"
 log "Dumping course structures to ${LMSDIR}/course_structures.csv"
 # shellcheck disable=SC2024
 if [[ ${DRYMODE} -eq 0 ]]; then
-  sudo -u www-data /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms --settings production dump_structure | sudo -u edxapp tee "${LMSDIR}/course_structures.csv" > /dev/null
+  sudo -u www-data -s /bin/bash -c "source /edx/app/edxapp/edxapp_env;/edx/bin/manage.edxapp lms --settings production dump_structure" | sudo -u edxapp tee "${LMSDIR}/course_structures.csv" > /dev/null
 fi
 
 # Upload all to S3
