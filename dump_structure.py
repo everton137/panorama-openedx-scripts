@@ -8,7 +8,7 @@ sudo -u edxapp /edx/bin/python.edxapp /edx/app/edxapp/edx-platform/manage.py lms
 """
 import json
 from textwrap import dedent
-import unicodecsv as csv
+import csv
 import sys
 
 from django.core.management.base import BaseCommand, CommandError
