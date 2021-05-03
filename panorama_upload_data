@@ -48,6 +48,7 @@ LMSENVYAML=/edx/etc/lms.yml
 REPORTDIR=/edx/var/edxapp/panorama          # Temporary directory
 MYSQL_USER=edxapp001                        # User for MySQL queries
 LOGS_DIRECTORY=/edx/var/log/tracking/       # Location of the tracking logs
+PYTHONINTERPRETER=$(command -v python || command -v python3)  #Python interpreter
 
 TABLES="auth_user\
  student_courseenrollment\
@@ -209,7 +210,7 @@ do
     REPORTFILE=${TABLE}.csv
     log "Dumping ${TABLE} to ${LMSDIR}/${REPORTFILE}"
     if [[ ${DRYMODE} -eq 0 ]]; then
-      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | tr -d '\r' | "${SCRIPTDIR}"/tab2csv.py | sudo tee "${LMSDIR}/${REPORTFILE}" > /dev/null
+      mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT * FROM ${TABLE};" | tr -d '\r' | $PYTHONINTERPRETER "${SCRIPTDIR}"/tab2csv.py | sudo tee "${LMSDIR}/${REPORTFILE}" > /dev/null
     else
       log "Table ${TABLE}:"
       mysql -h "${MYSQL_HOST}" -u "${MYSQL_USER}" -b edxapp -e "SELECT count(*) FROM ${TABLE};"
