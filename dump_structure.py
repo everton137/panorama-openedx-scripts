@@ -98,9 +98,9 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
 
     filtered_metadata = {k: v for k, v in items.items() if k not in FILTER_LIST}
 
-    destination[unicode(module.location)] = {
+    destination[module.location] = {
         'category': module.location.block_type,
-        'children': [unicode(child) for child in getattr(module, 'children', [])],
+        'children': [child for child in getattr(module, 'children', [])],
         'metadata': filtered_metadata,
     }
 
@@ -121,7 +121,7 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
                 return field.values != field.default
 
         inherited_metadata = {field.name: field.read_json(module) for field in module.fields.values() if is_inherited(field)}
-        destination[unicode(module.location)]['inherited_metadata'] = inherited_metadata
+        destination[module.location]['inherited_metadata'] = inherited_metadata
 
     display_name = filtered_metadata['display_name'] if 'display_name' in filtered_metadata else ''
 
@@ -129,7 +129,7 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
     if not children:
         if not category_filter or category_filter == module.location.block_type:
             structure.append({
-                'module_location': unicode(module.location),
+                'module_location': module.location,
                 'block_type': module.location.block_type,
                 'parent_id': upper_structure['parent_id'],
                 'course': upper_structure['course'],
@@ -140,14 +140,14 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
             })
     elif module.location.block_type == 'course':
         structure.append({
-            'module_location': unicode(module.location),
+            'module_location': module.location,
             'block_type': module.location.block_type,
             'parent_id': '',
             'course': display_name
         })
     elif module.location.block_type == 'chapter':
         structure.append({
-            'module_location': unicode(module.location),
+            'module_location': module.location,
             'block_type': module.location.block_type,
             'parent_id': upper_structure['parent_id'],
             'course': upper_structure['course'],
@@ -155,7 +155,7 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
         })
     elif module.location.block_type == 'sequential':
         structure.append({
-            'module_location': unicode(module.location),
+            'module_location': module.location,
             'block_type': module.location.block_type,
             'parent_id': upper_structure['parent_id'],
             'course': upper_structure['course'],
@@ -164,7 +164,7 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
         })
     elif module.location.block_type == 'vertical':
         structure.append({
-            'module_location': unicode(module.location),
+            'module_location': module.location,
             'block_type': module.location.block_type,
             'parent_id': upper_structure['parent_id'],
             'course': upper_structure['course'],
@@ -175,7 +175,7 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
 
     upstream_structure = upper_structure
     upstream_structure[module.location.block_type] = display_name
-    upstream_structure['parent_id'] = unicode(module.location)
+    upstream_structure['parent_id'] = module.location
 
     for child in children:
         dump_module(child, destination, inherited, defaults, category_filter, upstream_structure)
