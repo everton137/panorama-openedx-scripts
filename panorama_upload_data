@@ -37,8 +37,14 @@
 
 
 # Global configurable variables variables
-LMSAUTHJSON=/edx/app/edxapp/lms.auth.json   # Location of the LMS authorization file
+
+if [[ -e /edx/app/edxapp/lms.auth.json ]]; then
+  LMSAUTH=/edx/app/edxapp/lms.auth.json   # Location of the LMS authorization file, ironwood
+elif [[ -e /edx/etc/lms.yml ]]; then
+  LMSAUTH=/edx/etc/lms.yml
+fi
 LMSENVJSON=/edx/app/edxapp/lms.env.json     # Location of the LMS config file
+LMSENVYAML=/edx/etc/lms.yml
 REPORTDIR=/edx/var/edxapp/panorama          # Temporary directory
 MYSQL_USER=edxapp001                        # User for MySQL queries
 LOGS_DIRECTORY=/edx/var/log/tracking/       # Location of the tracking logs
@@ -83,7 +89,7 @@ while getopts "h?l:b:u:p:t:H:dvx" opt; do
         echo "-b <bucket>: name of the bucket to upload the data."
         echo "           will default to a bucket found matching the pattern /panoramabuckets........-raw........-............$/"
         echo "-u <MySQL user>: will default to 'edxapp001'"
-        echo "-p <MySQL password>: will default to the password configured in ${LMSAUTHJSON}"
+        echo "-p <MySQL password>: will default to the password configured in ${LMSAUTH}"
         echo "-v: verbose mode"
         echo "-d: dry verbose mode. Will not query the database or upload results. Implies verbose mode"
         echo "-x: Exclude tracking logs upload"
@@ -148,14 +154,14 @@ fi
 if [[ -z "$MYSQL_PWD" ]]; then
   log  "-p MySQL password not specified"
 
-  MYSQL_PWD=$(sudo -u edxapp awk '/DATABASES/{next}/default/{next}/PASSWORD/{ p=$2 ; next }/edxapp001/{print p; exit}' "${LMSAUTHJSON}")
+  MYSQL_PWD=$(sudo -u edxapp awk '/DATABASES/{next}/default/{next}/PASSWORD/{ p=$2 ; next }/edxapp001/{print p; exit}' "${LMSAUTH}")
   if [[ $? -ne 0 ]]; then
-    log  "Could not find MySQL password from ${LMSAUTHJSON}"
+    log  "Could not find MySQL password from ${LMSAUTH}"
     if [[ ${DRYMODE} -ne 0 ]]; then
       exit 1
     fi
   else
-    log  "MySQL password found in ${LMSAUTHJSON}"
+    log  "MySQL password found in ${LMSAUTH}"
     MYSQL_PWD=$(echo "$MYSQL_PWD" | tr -d '",')
     export MYSQL_PWD
   fi
@@ -175,8 +181,18 @@ if [[ -z "$LMS" ]]; then
     else
       log  "Using LMS=${LMS} from ${LMSENVJSON}"
     fi
+  elif [[ -f "${LMSENVYAML}" ]]; then
+    LMS=$(sudo -u edxapp awk '/^LMS_BASE:/{print $2}' "${LMSENVYAML}" | tr -d '",')
+    if [[ -z "$LMS" ]]; then
+      log  "LMS_BASE not found in ${LMSENVYAML}"
+      if [[ ${DRYMODE} -ne 0 ]]; then
+        exit 1
+      fi
+    else
+      log  "Using LMS=${LMS} from ${LMSENVYAML}"
+    fi
   else
-    log  "${LMSENVJSON} not found"
+    log  "${LMSENVJSON} nor ${LMSENVYAML} found"
       if [[ ${DRYMODE} -ne 0 ]]; then
         exit 1
       fi
