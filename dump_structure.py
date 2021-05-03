@@ -96,7 +96,7 @@ def dump_module(module, destination=None, inherited=False, defaults=False, categ
     if isinstance(module, DiscussionXBlock) and 'discussion_id' not in items:
         items['discussion_id'] = module.discussion_id
 
-    filtered_metadata = {k: v for k, v in items.iteritems() if k not in FILTER_LIST}
+    filtered_metadata = {k: v for k, v in items.items() if k not in FILTER_LIST}
 
     destination[unicode(module.location)] = {
         'category': module.location.block_type,
